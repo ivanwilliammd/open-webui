@@ -16,66 +16,46 @@
 ############################################################
 
 services:
-	- type: web
-		name: open-webui
-		env: docker
-		plan: standard # Options: starter, standard, pro, (or gpu for GPU types)
-		region: oregon # Change to closest region
-		runtime: docker
-		dockerfilePath: ./Dockerfile
-		dockerContext: .
-		# Build args to control image features (see Dockerfile ARGs)
-		build:
-			dockerCommand: ''
-			args:
-				USE_CUDA: 'false'           # Set 'true' if using GPU (also set gpuType & plan)
-				USE_CUDA_VER: 'cu128'       # Matches Dockerfile default
-				USE_OLLAMA: 'false'         # Set 'true' to bundle Ollama inside container
-				USE_SLIM: 'false'           # 'true' to skip pre-downloading some models
-				USE_EMBEDDING_MODEL: 'sentence-transformers/all-MiniLM-L6-v2'
-				USE_RERANKING_MODEL: ''
-		autoDeploy: true
-		# For internal Ollama, you may need increased memory (standard+ plan)
-		# gpuType: 'nvidia-rtx-a5000'   # Uncomment when GPU needed & plan supports it
-		# health check defined in Dockerfile (HEALTHCHECK) hitting /health
-		healthCheckPath: /health
-		scaling:
-			minInstances: 1
-			maxInstances: 1
-			targetCPUPercent: 60
-		envVars:
-			- key: PORT
-				value: '8080'
-			- key: WEBUI_SECRET_KEY
-				generateValue: true # Render auto-generates; override with existing secret if migrating
-			- key: OPENAI_API_KEY
-				sync: false # Set in dashboard if using OpenAI
-			- key: OPENAI_API_BASE_URL
-				value: ''
-			- key: OLLAMA_BASE_URL
-				value: '/ollama' # Path used inside container when USE_OLLAMA=true
-			- key: USE_OLLAMA_DOCKER
-				value: '${USE_OLLAMA}'
-			- key: USE_CUDA_DOCKER
-				value: '${USE_CUDA}'
-			- key: USE_CUDA_DOCKER_VER
-				value: '${USE_CUDA_VER}'
-			- key: RAG_EMBEDDING_MODEL
-				value: 'sentence-transformers/all-MiniLM-L6-v2'
-			- key: RAG_RERANKING_MODEL
-				value: ''
-			- key: WHISPER_MODEL
-				value: 'base'
-			- key: ANONYMIZED_TELEMETRY
-				value: 'false'
-			- key: DO_NOT_TRACK
-				value: 'true'
-			- key: UVICORN_WORKERS
-				value: '1'
-		disks:
-			- name: data
-				mountPath: /app/backend/data
-				sizeGB: 5 # Increase if storing many documents/models
+  - type: web
+    name: open-webui
+    env: docker
+    plan: standard # starter | standard | pro
+    region: oregon # choose closest
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    build:
+      dockerCommand: ''
+      args:
+        USE_SLIM: 'true'  # faster startup, skip pre-downloading models
+        USE_EMBEDDING_MODEL: 'sentence-transformers/all-MiniLM-L6-v2'
+    autoDeploy: true
+    healthCheckPath: /health
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+      targetCPUPercent: 60
+    envVars:
+      - key: PORT
+        value: '8080'
+      - key: WEBUI_SECRET_KEY
+        generateValue: true
+      # Database (set DATABASE_URL in dashboard; leave blank here to avoid committing secrets)
+      - key: DATABASE_URL
+        sync: false
+      # Optional: tighten CORS for production
+      - key: CORS_ALLOW_ORIGIN
+        value: 'https://open-webui-ivanmd.onrender.com'
+      - key: ANONYMIZED_TELEMETRY
+        value: 'false'
+      - key: DO_NOT_TRACK
+        value: 'true'
+      - key: UVICORN_WORKERS
+        value: '1'
+    disks:
+      - name: data
+        mountPath: /app/backend/data
+        sizeGB: 5
 
 # Optional: Separate worker for background tasks (future use)
 # workers:
