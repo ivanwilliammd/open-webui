@@ -1,0 +1,105 @@
+############################################################
+# Render Blueprint for deploying Open WebUI                #
+#                                                          #
+# Docs: https://render.com/docs/blueprint-spec             #
+# Deploy: render blueprint launch                          #
+#                                                          #
+# Notes:                                                   #
+# - Uses the multi-stage Dockerfile in repo.               #
+# - Exposes port 8080 (default in Dockerfile).             #
+# - Persists data folder (backend/data) on a Render Disk.  #
+# - Set secrets in the Render dashboard or via blueprint.  #
+# - WEBUI_SECRET_KEY should be a secret.                   #
+# - Toggle embedded Ollama by setting USE_OLLAMA=true.     #
+# - GPU instances are limited; omit gpuType if not needed. #
+# - To enable CUDA builds set build args & choose GPU plan.#
+############################################################
+
+services:
+	- type: web
+		name: open-webui
+		env: docker
+		plan: standard # Options: starter, standard, pro, (or gpu for GPU types)
+		region: oregon # Change to closest region
+		runtime: docker
+		dockerfilePath: ./Dockerfile
+		dockerContext: .
+		# Build args to control image features (see Dockerfile ARGs)
+		build:
+			dockerCommand: ''
+			args:
+				USE_CUDA: 'false'           # Set 'true' if using GPU (also set gpuType & plan)
+				USE_CUDA_VER: 'cu128'       # Matches Dockerfile default
+				USE_OLLAMA: 'false'         # Set 'true' to bundle Ollama inside container
+				USE_SLIM: 'false'           # 'true' to skip pre-downloading some models
+				USE_EMBEDDING_MODEL: 'sentence-transformers/all-MiniLM-L6-v2'
+				USE_RERANKING_MODEL: ''
+		autoDeploy: true
+		# For internal Ollama, you may need increased memory (standard+ plan)
+		# gpuType: 'nvidia-rtx-a5000'   # Uncomment when GPU needed & plan supports it
+		# health check defined in Dockerfile (HEALTHCHECK) hitting /health
+		healthCheckPath: /health
+		scaling:
+			minInstances: 1
+			maxInstances: 1
+			targetCPUPercent: 60
+		envVars:
+			- key: PORT
+				value: '8080'
+			- key: WEBUI_SECRET_KEY
+				generateValue: true # Render auto-generates; override with existing secret if migrating
+			- key: OPENAI_API_KEY
+				sync: false # Set in dashboard if using OpenAI
+			- key: OPENAI_API_BASE_URL
+				value: ''
+			- key: OLLAMA_BASE_URL
+				value: '/ollama' # Path used inside container when USE_OLLAMA=true
+			- key: USE_OLLAMA_DOCKER
+				value: '${USE_OLLAMA}'
+			- key: USE_CUDA_DOCKER
+				value: '${USE_CUDA}'
+			- key: USE_CUDA_DOCKER_VER
+				value: '${USE_CUDA_VER}'
+			- key: RAG_EMBEDDING_MODEL
+				value: 'sentence-transformers/all-MiniLM-L6-v2'
+			- key: RAG_RERANKING_MODEL
+				value: ''
+			- key: WHISPER_MODEL
+				value: 'base'
+			- key: ANONYMIZED_TELEMETRY
+				value: 'false'
+			- key: DO_NOT_TRACK
+				value: 'true'
+			- key: UVICORN_WORKERS
+				value: '1'
+		disks:
+			- name: data
+				mountPath: /app/backend/data
+				sizeGB: 5 # Increase if storing many documents/models
+
+# Optional: Separate worker for background tasks (future use)
+# workers:
+#   - name: open-webui-worker
+#     type: worker
+#     env: docker
+#     dockerfilePath: ./Dockerfile
+#     dockerContext: .
+#     build:
+#       args:
+#         USE_SLIM: 'true'
+#     autoDeploy: true
+#     envVars:
+#       - key: PORT
+#         value: '8080'
+#     disks:
+#       - name: data
+#         mountPath: /app/backend/data
+#         sizeGB: 5
+
+# Tips:
+# 1. Add OPENAI_API_KEY through the Render Dashboard -> Environment section if needed.
+# 2. For GPU + CUDA: set USE_CUDA=true and choose a GPU plan + gpuType, may raise costs.
+# 3. For external Ollama: set OLLAMA_BASE_URL to the external endpoint and leave USE_OLLAMA=false.
+# 4. Increase disk size for large embeddings or Whisper models.
+# 5. To force rebuild after model updates, change a dummy build arg or set BUILD_HASH env.
+
