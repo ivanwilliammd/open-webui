@@ -26,9 +26,9 @@ if test "$WEBUI_SECRET_KEY $WEBUI_JWT_SECRET_KEY" = " "; then
   echo "Loading WEBUI_SECRET_KEY from file, not provided as an environment variable."
 
   if ! [ -e "$KEY_FILE" ]; then
-    echo "Generating WEBUI_SECRET_KEY"
-    # Generate a random value to use as a WEBUI_SECRET_KEY in case the user didn't provide one.
-    echo $(head -c 12 /dev/random | base64) > "$KEY_FILE"
+    echo "Generating WEBUI_SECRET_KEY (non-blocking)"
+    # Use /dev/urandom to avoid blocking in low-entropy container environments (Render port scan issues)
+    head -c 32 /dev/urandom | base64 | tr -d '\n' > "$KEY_FILE"
   fi
 
   echo "Loading WEBUI_SECRET_KEY from $KEY_FILE"
@@ -71,4 +71,13 @@ fi
 
 PYTHON_CMD=$(command -v python3 || command -v python)
 
-WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app --host "$HOST" --port "$PORT" --forwarded-allow-ips '*' --workers "${UVICORN_WORKERS:-1}"
+echo "[startup] Launching Open WebUI on $HOST:$PORT (workers=${UVICORN_WORKERS:-1})"
+echo "[startup] DATABASE_URL: ${DATABASE_URL:+set}" "| VECTOR_DB: ${VECTOR_DB:-chroma}" "| DEVICE_TYPE: ${DEVICE_TYPE:-cpu}"
+echo "[startup] Waiting for service to bind..."
+
+WEBUI_SECRET_KEY="$WEBUI_SECRET_KEY" exec "$PYTHON_CMD" -m uvicorn open_webui.main:app \
+  --host "$HOST" \
+  --port "$PORT" \
+  --forwarded-allow-ips '*' \
+  --workers "${UVICORN_WORKERS:-1}" \
+  --log-level info
